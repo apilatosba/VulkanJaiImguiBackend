@@ -2,6 +2,10 @@ AT_COMPILE_TIME :: true;
 
 IMGUI_PATH :: "source";
 
+// Puts #type_info_none on the generated structs. Without Type_Info the structs can't be printed or inspected at runtime,
+// but the executable is smaller and the compiler doesn't complain about big structs like ImDrawList.
+STRUCTS_TYPE_INFO_NONE :: true;
+
 DECLARATIONS_TO_OMIT :: string.[
     // We have custom declarations for these in module.jai:
     "ImVec2",
@@ -201,6 +205,10 @@ imgui_visitor :: (decl: *Declaration, parent_decl: *Declaration) -> Declaration_
     if parent_decl && parent_decl.kind == .STRUCT && decl.kind == .DECLARATION && decl.expression && decl.type {
         struct_type := find_underlying_type(decl.type).type_of_struct;
         if struct_type && struct_type.name == "ImSmallStack_"  decl.expression = null;
+    }
+
+    if decl.kind == .STRUCT && STRUCTS_TYPE_INFO_NONE {
+        decl.decl_flags |= .TYPE_INFO_NONE;
     }
 
     if decl.kind == .ENUM {

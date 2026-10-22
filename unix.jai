@@ -1,7 +1,7 @@
 //
 // This file was auto-generated using the following command:
 //
-// jai /home/apila/source/jai_modules/Imgui//generate.jai modules +jails_diagnostics import_dir /home/apila/.vscode/extensions/apparentlystudio.jails-0.2.1/out/metaprogram
+// jai generate.jai
 //
 
 
@@ -37,14 +37,14 @@ ImU32 :: u32;
 ImS64 :: s64;
 ImU64 :: u64;
 
-ImDrawListSharedData :: struct {}
+ImDrawListSharedData :: struct #type_info_none {}
 
-ImFontAtlasBuilder :: struct {}
+ImFontAtlasBuilder :: struct #type_info_none {}
 
-ImFontLoader :: struct {}
+ImFontLoader :: struct #type_info_none {}
 
 // Forward declarations: ImGui layer
-ImGuiContext :: struct {}
+ImGuiContext :: struct #type_info_none {}
 
 // Enumerations
 // - We don't use strongly typed enums much because they add constraints (can't extend in private code, can't store typed in bit fields, extra casting on iteration)
@@ -491,7 +491,7 @@ ImTextureID :: ImU64;
 //      inline ImTextureRef ImTextureRefFromID(ImTextureID tex_id) { ImTextureRef tex_ref = { ._TexData = NULL, .TexID = tex_id }; return tex_ref; }
 // In 1.92 we changed most drawing functions using ImTextureID to use ImTextureRef.
 // We intentionally do not provide an implicit ImTextureRef -> ImTextureID cast operator because it is technically lossy to convert ImTextureRef to ImTextureID before rendering.
-ImTextureRef :: struct {
+ImTextureRef :: struct #type_info_none {
     _TexData: *ImTextureData; //      A texture, generally owned by a ImFontAtlas. Will convert to ImTextureID during render loop, after texture has been uploaded.
     _TexID:   ImTextureID; // _OR_ Low-level backend texture identifier, if already uploaded or created by user/app. Generally provided to e.g. ImGui::Image() calls.
 }
@@ -2785,14 +2785,14 @@ TableBgTarget :: enum u32 {
 // Obtained by calling TableGetSortSpecs().
 // When 'SpecsDirty == true' you can sort your data. It will be true with sorting specs have changed since last call, or the first time.
 // Make sure to set 'SpecsDirty = false' after sorting, else you may wastefully sort your data every frame!
-TableSortSpecs :: struct {
+TableSortSpecs :: struct #type_info_none {
     Specs:      *TableColumnSortSpecs; // Pointer to sort spec array.
     SpecsCount: s32; // Sort spec count. Most often 1. May be > 1 when ImGuiTableFlags_SortMulti is enabled. May be == 0 when ImGuiTableFlags_SortTristate is enabled.
     SpecsDirty: bool; // Set to true when specs have changed since last time! Use this to sort again, then clear the flag.
 }
 
 // Sorting specification for one column of a table (sizeof == 12 bytes)
-TableColumnSortSpecs :: struct {
+TableColumnSortSpecs :: struct #type_info_none {
     ColumnUserID:   ID; // User data for the column (if specified by a TableSetupColumn() call in the 'ImGuiID user_data' field). FIXME: Should be called 'UserData'..
     ColumnIndex:    ImS16; // Index of the column
     SortOrder:      ImS16; // Index within parent ImGuiTableSortSpecs (always stored in order starting from 0, tables sorted on a single criteria will always have a 0 here)
@@ -2804,7 +2804,7 @@ TableColumnSortSpecs :: struct {
 // We call C++ constructor on own allocated memory via the placement "new(ptr) Type()" syntax.
 // Defining a custom placement new() with a custom parameter allows us to bypass including <new> which on some platforms complains when user has disabled exceptions.
 //-----------------------------------------------------------------------------
-ImNewWrapper :: struct {
+ImNewWrapper :: struct #type_info_none {
     __empty_struct_padding: u8; // C++ makes empty structs have length 1
 }
 
@@ -2815,7 +2815,7 @@ ImNewWrapper :: struct {
 // During the frame, use ImGui::PushStyleVar(ImGuiStyleVar_XXXX)/PopStyleVar() to alter the main style values,
 // and ImGui::PushStyleColor(ImGuiCol_XXX)/PopStyleColor() for colors.
 //-----------------------------------------------------------------------------
-Style :: struct {
+Style :: struct #type_info_none {
     FontSizeBase:                     float; // Current base font size before external global factors are applied. Use PushFont(NULL, size) to modify. Use ImGui::GetFontSize() to obtain scaled value.
     FontScaleMain:                    float; // Main global scale factor. May be set by application once, or exposed to end-user.
     FontScaleDpi:                     float; // Additional global scale factor from viewport/monitor contents scale. In docking branch: when io.ConfigDpiScaleFonts is enabled, this is automatically overwritten when changing monitor DPI.
@@ -2909,14 +2909,14 @@ Style :: struct {
 
 // [Internal] Storage used by IsKeyDown(), IsKeyPressed() etc functions.
 // If prior to 1.87 you used io.KeysDownDuration[] (which was marked as internal), you should use GetKeyData(key)->DownDuration and *NOT* io.KeysData[key]->DownDuration.
-KeyData :: struct {
+KeyData :: struct #type_info_none {
     Down:             bool; // True for if key is down
     DownDuration:     float; // Duration the key has been down (<0.0f: not pressed, 0.0f: just pressed, >0.0f: time held)
     DownDurationPrev: float; // Last frame duration the key has been down
     AnalogValue:      float; // 0.0f..1.0f for gamepad values
 }
 
-IO :: struct {
+IO :: struct #type_info_none {
     ConfigFlags_:                                  ConfigFlags; // = 0              // See ImGuiConfigFlags_ enum. Set by user/application. Keyboard/Gamepad navigation options, etc.
     BackendFlags_:                                 BackendFlags; // = 0              // See ImGuiBackendFlags_ enum. Set by backend (imgui_impl_xxx files or custom backend) to communicate features supported by the backend.
     DisplaySize:                                   ImVec2; // <unset>          // Main display size, in pixels (== GetMainViewport()->Size). May change every frame.
@@ -3070,7 +3070,7 @@ IO :: struct {
 // - ImGuiInputTextFlags_CallbackHistory:     Callback on pressing Up/Down arrows
 // - ImGuiInputTextFlags_CallbackCharFilter:  Callback on character inputs to replace or discard them. Modify 'EventChar' to replace or discard, or return 1 in callback to discard.
 // - ImGuiInputTextFlags_CallbackResize:      Callback on buffer capacity changes request (beyond 'buf_size' parameter value), allowing the string to grow.
-InputTextCallbackData :: struct {
+InputTextCallbackData :: struct #type_info_none {
     Ctx:            *ImGuiContext; // Parent UI context
     EventFlag:      InputTextFlags; // One ImGuiInputTextFlags_Callback*    // Read-only
     Flags:          InputTextFlags; // What user passed to InputText()      // Read-only
@@ -3100,7 +3100,7 @@ InputTextCallbackData :: struct {
 
 // Resizing callback data to apply custom constraint. As enabled by SetNextWindowSizeConstraints(). Callback is called during the next Begin().
 // NB: For basic min/max size constraint on each axis you don't need to use the callback! The SetNextWindowSizeConstraints() parameters are enough.
-SizeCallbackData :: struct {
+SizeCallbackData :: struct #type_info_none {
     UserData:    *void; // Read-only.   What user passed to SetNextWindowSizeConstraints(). Generally store an integer or float in here (need reinterpret_cast<>).
     Pos:         ImVec2; // Read-only.   Window position, for reference.
     CurrentSize: ImVec2; // Read-only.   Current window size.
@@ -3108,7 +3108,7 @@ SizeCallbackData :: struct {
 }
 
 // Data payload for Drag and Drop operations: AcceptDragDropPayload(), GetDragDropPayload()
-Payload :: struct {
+Payload :: struct #type_info_none {
     Data:           *void; // Data (copied and owned by dear imgui)
     DataSize:       s32; // Data size
 
@@ -3122,13 +3122,13 @@ Payload :: struct {
 
 // Helper: Execute a block of code at maximum once a frame. Convenient if you want to quickly create a UI within deep-nested code that runs multiple times every frame.
 // Usage: static ImGuiOnceUponAFrame oaf; if (oaf) ImGui::Text("This will be called only once per frame");
-OnceUponAFrame :: struct {
+OnceUponAFrame :: struct #type_info_none {
     RefFrame: s32;
 }
 
 // Helper: Parse and apply text filters e.g. 'aaa bbb' (all), 'aaa,bbb' (any), '-aaa' (exclude), '"Hello, world"' (exact sequence)
-TextFilterItem :: struct {}
-TextFilter :: struct {
+TextFilterItem :: struct #type_info_none {}
+TextFilter :: struct #type_info_none {
     Constructor :: (this: *TextFilter, default_filter: *u8 = "") -> void #cpp_method #foreign imgui "_ZN15ImGuiTextFilterC1EPKc";
     PassFilter :: (this: *TextFilter, text: *u8, text_end: *u8 = null) -> bool #cpp_method #foreign imgui "_ZNK15ImGuiTextFilter10PassFilterEPKcS1_";
     PassFilter :: (this: *TextFilter, text: string) -> bool #no_context {
@@ -3146,9 +3146,9 @@ TextFilter :: struct {
 }
 
 // [Internal] Key+Value for ImGuiStorage
-StoragePair :: struct {
+StoragePair :: struct #type_info_none {
     key: ID;
-    struct {
+    struct #type_info_none {
         val_p: *void; // largest member, moved to the start of the struct/union to support #overlay.
 
         #overlay (val_p) val_i: s32;
@@ -3164,7 +3164,7 @@ StoragePair :: struct {
 // - You want to manipulate the open/close state of a particular sub-tree in your interface (tree node uses Int 0/1 to store their state).
 // - You want to store custom debug data easily without adding or editing structures in your code (probably not efficient, but convenient)
 // Types are NOT stored, so it is up to you to make sure your Key don't collide with different types.
-Storage :: struct {
+Storage :: struct #type_info_none {
     // [Internal]
     Data: ImVector(StoragePair);
 
@@ -3222,7 +3222,7 @@ ListClipperFlags :: enum_flags u32 {
 // - Clipper calculate the actual range of elements to display based on the current clipping rectangle, position the cursor before the first visible element.
 // - User code submit visible elements.
 // - The clipper also handles various subtleties related to keyboard/gamepad navigation, wrapping etc.
-ListClipper :: struct {
+ListClipper :: struct #type_info_none {
     DisplayStart:     s32; // First item to display, updated by each call to Step()
     DisplayEnd:       s32; // End of items to display (exclusive)
     UserIndex:        s32; // Helper storage for user convenience/code. Optional, and otherwise unused if you don't use it.
@@ -3309,7 +3309,7 @@ MultiSelectFlags :: enum_flags u32 {
 // - Use 'Demo->Tools->Debug Log->Selection' to see requests as they happen.
 // - Some fields are only useful if your list is dynamic and allows deletion (getting post-deletion focus/state right is shown in the demo)
 // - Below: who reads/writes each fields? 'r'=read, 'w'=write, 'ms'=multi-select code, 'app'=application/user code.
-MultiSelectIO :: struct {
+MultiSelectIO :: struct #type_info_none {
     Requests:      ImVector(SelectionRequest); //  ms:w, app:r     /  ms:w  app:r   // Requests to apply to your selection data.
     RangeSrcItem:  SelectionUserData; //  ms:w  app:r     /                // (If using clipper) Begin: Source item (often the first selected item) must never be clipped: use clipper.IncludeItemByIndex() to ensure it is submitted.
     NavIdItem:     SelectionUserData; //  ms:w, app:r     /                // (If using deletion) Last known SetNextItemSelectionUserData() value for NavId (if part of submitted items).
@@ -3330,7 +3330,7 @@ SelectionRequestType :: enum u32 {
 }
 
 // Selection request item
-SelectionRequest :: struct {
+SelectionRequest :: struct #type_info_none {
     Type:           SelectionRequestType; //  ms:w, app:r     /  ms:w, app:r   // Request type. You'll most often receive 1 Clear + 1 SetRange with a single-item range.
     Selected:       bool; //  ms:w, app:r     /  ms:w, app:r   // Parameter for SetAll/SetRange requests (true = select, false = unselect)
     RangeDirection: ImS8; //                  /  ms:w  app:r   // Parameter for SetRange request: +1 when RangeFirstItem comes before RangeLastItem, -1 otherwise. Useful if you want to preserve selection order on a backward Shift+Click.
@@ -3354,7 +3354,7 @@ SelectionRequest :: struct {
 // Many combinations are possible depending on how you prefer to store your items and how you prefer to store your selection.
 // Large applications are likely to eventually want to get rid of this indirection layer and do their own thing.
 // See https://github.com/ocornut/imgui/wiki/Multi-Select for details and pseudo-code using this helper.
-SelectionBasicStorage :: struct {
+SelectionBasicStorage :: struct #type_info_none {
     Size:                    s32; //          // Number of selected items, maintained by this helper.
     PreserveOrder:           bool; // = false  // GetNextSelectedItem() will return ordered selection (currently implemented by two additional sorts of selection. Could be improved)
     UserData:                *void; // = NULL   // User data for use by adapter function        // e.g. selection.UserData = (void*)my_items;
@@ -3374,7 +3374,7 @@ SelectionBasicStorage :: struct {
 
 // Optional helper to apply multi-selection requests to existing randomly accessible storage.
 // Convenient if you want to quickly wire multi-select API on e.g. an array of bool or items storing their own selection state.
-SelectionExternalStorage :: struct {
+SelectionExternalStorage :: struct #type_info_none {
     UserData:               *void; // User data for use by adapter function                                // e.g. selection.UserData = (void*)my_items;
     AdapterSetItemSelected: #type (self: *SelectionExternalStorage, idx: s32, selected: bool) -> void #c_call; // e.g. AdapterSetItemSelected = [](ImGuiSelectionExternalStorage* self, int idx, bool selected) { ((MyItems**)self->UserData)[idx]->Selected = selected; }
 
@@ -3390,7 +3390,7 @@ ImDrawIdx :: u16;
 //   this fields allow us to render meshes larger than 64K vertices while keeping 16-bit indices.
 //   Backends made for <1.71. will typically ignore the VtxOffset fields.
 // - The ClipRect/TexRef/VtxOffset fields must be contiguous as we memcmp() them together (this is asserted for).
-ImDrawCmd :: struct {
+ImDrawCmd :: struct #type_info_none {
     ClipRect:               ImVec4; // 4*4  // Clipping rectangle (x1, y1, x2, y2). Subtract ImDrawData->DisplayPos to get clipping rectangle in "viewport" coordinates
     TexRef:                 ImTextureRef; // 16   // Reference to a font/texture atlas (where backend called ImTextureData::SetTexID()) or to a user-provided texture ID (via e.g. ImGui::Image() calls). Both will lead to a ImTextureID value.
     VtxOffset:              u32; // 4    // Start offset in vertex buffer. ImGuiBackendFlags_RendererHasVtxOffset: always 0, otherwise may be >0 to support meshes larger than 64K vertices with 16-bit indices.
@@ -3402,28 +3402,28 @@ ImDrawCmd :: struct {
     UserCallbackDataOffset: s32; // 4 // [Internal] Offset of callback user data when using storage, otherwise -1.
 }
 
-ImDrawVert :: struct {
+ImDrawVert :: struct #type_info_none {
     pos: ImVec2;
     uv:  ImVec2;
     col: ImU32;
 }
 
 // [Internal] For use by ImDrawList
-ImDrawCmdHeader :: struct {
+ImDrawCmdHeader :: struct #type_info_none {
     ClipRect:  ImVec4;
     TexRef:    ImTextureRef;
     VtxOffset: u32;
 }
 
 // Forward declarations: ImDrawList, ImFontAtlas layer
-ImDrawChannel :: struct {
+ImDrawChannel :: struct #type_info_none {
     _CmdBuffer: ImVector(ImDrawCmd);
     _IdxBuffer: ImVector(ImDrawIdx);
 }
 
 // Split/Merge functions are used to split the draw list into different layers which can be drawn into out of order.
 // This is used by the Columns/Tables API, so items of each column can be batched together in a same draw call.
-ImDrawListSplitter :: struct {
+ImDrawListSplitter :: struct #type_info_none {
     _Current:  s32; // Current channel number (0)
     _Count:    s32; // Number of active channels (1+)
     _Channels: ImVector(ImDrawChannel); // Draw channels (not resized down so _Count might be < Channels.Size)
@@ -3546,7 +3546,7 @@ ImDrawFlags :: enum_flags s32 {
 // In single viewport mode, top-left is == GetMainViewport()->Pos (generally 0,0), bottom-right is == GetMainViewport()->Pos+Size (generally io.DisplaySize).
 // You are totally free to apply whatever transformation matrix you want to the data (depending on the use of the transformation you may want to apply it to ClipRect as well!)
 // Important: Primitives are always added to the list and not culled (culling is done at higher-level by ImGui:: functions), if you use this API a lot consider coarse culling your drawn objects.
-ImDrawList :: struct {
+ImDrawList :: struct #type_info_none {
     CmdBuffer:             ImVector(ImDrawCmd); // Draw commands. Typically 1 command = 1 GPU draw call, unless the command is a callback.
     IdxBuffer:             ImVector(ImDrawIdx); // Index buffer. Each command consume ImDrawCmd::ElemCount of those
     VtxBuffer:             ImVector(ImDrawVert); // Vertex buffer.
@@ -3790,7 +3790,7 @@ ImDrawList :: struct {
 // All draw data to render a Dear ImGui frame
 // (NB: the style and the naming convention here is a little inconsistent, we currently preserve them for backward compatibility purpose,
 // as this is one of the oldest structure exposed by the library! Basically, ImDrawList == CmdList)
-ImDrawData :: struct {
+ImDrawData :: struct #type_info_none {
     Valid:            bool; // Only valid after Render() is called and before the next NewFrame() is called.
     FrameCount:       s32; // Frame counter of the emitter context. Mostly for debugging purpose.
     TotalIdxCount:    s32; // For convenience, sum of all ImDrawList's IdxBuffer.Size
@@ -3841,7 +3841,7 @@ ImTextureStatus :: enum u32 {
 // Coordinates of a rectangle within a texture.
 // When a texture is in ImTextureStatus_WantUpdates state, we provide a list of individual rectangles to copy to the graphics system.
 // You may use ImTextureData::Updates[] for the list, or ImTextureData::UpdateBox for a single bounding box.
-ImTextureRect :: struct {
+ImTextureRect :: struct #type_info_none {
     x: u16; // Upper-left coordinates of rectangle to update, within the parent Pixels[] array.
     y: u16; // Upper-left coordinates of rectangle to update, within the parent Pixels[] array.
     w: u16; // Size of rectangle to update (in pixels)
@@ -3855,7 +3855,7 @@ ImTextureRect :: struct {
 // - ImTextureID    TexID           = lower-level identifier stored in ImDrawCmd. ImDrawCmd can refer to textures not created by the backend, and for which there's no ImTextureData.
 // - void*          BackendUserData = higher-level opaque storage for backend own book-keeping. Some backends may have enough with TexID and not need both.
 // In columns below: who reads/writes each fields? 'r'=read, 'w'=write, 'core'=main library, 'backend'=renderer backend
-ImTextureData :: struct {
+ImTextureData :: struct #type_info_none {
     UniqueID:             s32; // w    -   // [DEBUG] Sequential index to facilitate identifying a texture when debugging/printing. Unique per atlas.
     Status:               ImTextureStatus; // rw   rw  // ImTextureStatus_OK/_WantCreate/_WantUpdates/_WantDestroy. Always use SetStatus() to modify!
     BackendUserData:      *void; // -    rw  // Convenience storage for backend. Some backends may have enough with TexID.
@@ -3879,7 +3879,7 @@ ImTextureData :: struct {
 }
 
 // A font input/source (we may rename this to ImFontSource in the future)
-ImFontConfig :: struct {
+ImFontConfig :: struct #type_info_none {
     Name:                 [40] u8; // <auto>   // Name (strictly to ease debugging, hence limited size buffer)
     FontData:             *void; //          // TTF/OTF data
     FontDataSize:         s32; //          // TTF/OTF data size
@@ -3917,7 +3917,7 @@ ImFontConfig :: struct {
 
 // Hold rendering data for one glyph.
 // (Note: some language parsers may fail to convert the bitfield members, in this case maybe drop store a single u32 or we can rework this)
-ImFontGlyph :: struct {
+ImFontGlyph :: struct #type_info_none {
     __bitfield: u32;
     /* 
         Colored: u32; /* 1 bits */ // Flag to indicate glyph is colored and should generally ignore tinting (make it usable with no shift on little-endian as this is used in loops)
@@ -3973,7 +3973,7 @@ get_Codepoint :: (fields: ImFontGlyph) -> u32 {
 
 // Helper to build glyph ranges from text/string data. Feed your application strings/characters to it then call BuildRanges().
 // This is essentially a tightly packed of vector of 64k booleans = 8KB storage.
-ImFontGlyphRangesBuilder :: struct {
+ImFontGlyphRangesBuilder :: struct #type_info_none {
     UsedChars: ImVector(ImU32); // Store 1-bit per Unicode code point (0=unused, 1=used)
 
     AddText :: (this: *ImFontGlyphRangesBuilder, text: *u8, text_end: *u8 = null) -> void #cpp_method #foreign imgui "_ZN24ImFontGlyphRangesBuilder7AddTextEPKcS1_";
@@ -3991,7 +3991,7 @@ ImFontAtlasRectId :: s32;
 // Output of ImFontAtlas::GetCustomRect() when using custom rectangles.
 // Those values may not be cached/stored as they are only valid for the current value of atlas->TexRef
 // (this is in theory derived from ImTextureRect but we use separate structures for reasons)
-ImFontAtlasRect :: struct {
+ImFontAtlasRect :: struct #type_info_none {
     x:   u16; // Position (in current texture)
     y:   u16; // Position (in current texture)
     w:   u16; // Size
@@ -4034,7 +4034,7 @@ ImFontAtlasFlags :: enum_flags u32 {
 //   You can set font_cfg->FontDataOwnedByAtlas=false to keep ownership of your data and it won't be freed,
 // - Even though many functions are suffixed with "TTF", OTF data is supported just as well.
 // - This is an old API and it is currently awkward for those and various other reasons! We will address them in the future!
-ImFontAtlas :: struct {
+ImFontAtlas :: struct #type_info_none {
     Constructor :: (this: *ImFontAtlas) -> void #cpp_method #foreign imgui "_ZN11ImFontAtlasC1Ev";
     Destructor_Base :: (this: *ImFontAtlas) -> void #cpp_method #foreign imgui "_ZN11ImFontAtlasD2Ev";
     Destructor :: (this: *ImFontAtlas) -> void #cpp_method #foreign imgui "_ZN11ImFontAtlasD1Ev";
@@ -4117,7 +4117,7 @@ ImFontAtlas :: struct {
     TexMaxHeight:        s32; // Maximum desired texture height. Must be a power of two. Default to 8192.
     UserData:            *void; // Store your own atlas related user-data (if e.g. you have multiple font atlas).
 
-    struct {
+    struct #type_info_none {
         TexRef: ImTextureRef; // Latest texture identifier == TexData->GetTexRef(). // RENAMED TexID to TexRef in 1.92.0.
 
         #overlay (TexRef) TexID: ImTextureRef; // Latest texture identifier == TexData->GetTexRef(). // RENAMED TexID to TexRef in 1.92.0.
@@ -4159,7 +4159,7 @@ ImFontAtlas :: struct {
 
 // Font runtime data for a given size
 // Important: pointers to ImFontBaked are only valid for the current frame.
-ImFontBaked :: struct {
+ImFontBaked :: struct #type_info_none {
     IndexAdvanceX:      ImVector(float); // 12-16 // out // Sparse. Glyphs->AdvanceX in a directly indexable way (cache-friendly for CalcTextSize functions which only this info, and are often bottleneck in large UI).
     FallbackAdvanceX:   float; // 4     // out // FindGlyph(FallbackChar)->AdvanceX
     Size:               float; // 4     // in  // Height of characters/line, set during loading (doesn't change after loading)
@@ -4247,7 +4247,7 @@ ImFontFlags :: enum_flags u32 {
 // - Since 1.92.0 a font may be rendered as any size! Therefore a font doesn't have one specific size.
 // - Use 'font->GetFontBaked(size)' to retrieve the ImFontBaked* corresponding to a given size.
 // - If you used g.Font + g.FontSize (which is frequent from the ImGui layer), you can use g.FontBaked as a shortcut, as g.FontBaked == g.Font->GetFontBaked(g.FontSize).
-ImFont :: struct {
+ImFont :: struct #type_info_none {
     LastBaked:                *ImFontBaked; // 4-8   // Cache last bound baked. NEVER USE DIRECTLY. Use GetFontBaked().
     OwnerAtlas:               *ImFontAtlas; // 4-8   // What we have been loaded into.
     Flags:                    ImFontFlags; // 4     // Font flags.
@@ -4318,7 +4318,7 @@ ViewportFlags :: enum_flags u32 {
 //   - Main Area = entire viewport.
 //   - Work Area = entire viewport minus sections used by main menu bars (for platform windows), or by task bar (for platform monitor).
 //   - Windows are generally trying to stay within the Work Area of their host viewport.
-Viewport :: struct {
+Viewport :: struct #type_info_none {
     ID_:               ID; // Unique identifier for the viewport
     Flags:             ViewportFlags; // See ImGuiViewportFlags_
     Pos:               ImVec2; // Main Area: Position of the viewport (Dear ImGui coordinates are the same as OS desktop/native coordinates)
@@ -4332,7 +4332,7 @@ Viewport :: struct {
 }
 
 // Access via ImGui::GetPlatformIO()
-PlatformIO :: struct {
+PlatformIO :: struct #type_info_none {
     Constructor :: (this: *PlatformIO) -> void #cpp_method #foreign imgui "_ZN15ImGuiPlatformIOC1Ev";
 
     Platform_GetClipboardTextFn:    #type (ctx: *ImGuiContext) -> *u8 #c_call; // Should return NULL on failure (e.g. clipboard data is not text).
@@ -4375,7 +4375,7 @@ PlatformIO :: struct {
 }
 
 // (Optional) Support for IME (Input Method Editor) via the platform_io.Platform_SetImeDataFn() function. Handler is called during EndFrame().
-PlatformImeData :: struct {
+PlatformImeData :: struct #type_info_none {
     WantVisible:     bool; // A widget wants the IME to be visible.
     WantTextInput:   bool; // A widget wants text input, not necessarily IME to be visible. This is automatically set to the upcoming value of io.WantTextInput.
     InputPos:        ImVec2; // Position of input cursor (for IME).
