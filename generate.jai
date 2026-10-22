@@ -9,6 +9,7 @@ DECLARATIONS_TO_OMIT :: string.[
     "ImColor",
     "ImVector",
     "ImDrawCallback",
+    "ImSmallStack_", // the default type of its SZ_T template parameter doesn't translate
 
     // Jai has its own, better "String_Builder"
     "ImGuiTextBuffer",
@@ -40,6 +41,7 @@ DECLARATIONS_TO_OMIT :: string.[
 generate_bindings :: (args: [] string) -> bool {
     compile        := array_find(args, "-compile");
     compile_debug  := array_find(args, "-debug");
+    vulkanjai      := !array_find(args, "-no_vulkanjai"); // generate the VulkanJai backend (imgui_impl_vulkanjai.jai)
 
     if compile {
         imgui_src_files: [..] string;
@@ -113,7 +115,18 @@ generate_bindings :: (args: [] string) -> bool {
         get_func_args_for_printing = imgui_get_function_arg_for_printing;
     }
 
-    return generate_bindings(options, output_filename);
+    if !generate_bindings(options, output_filename)  return false;
+
+    if vulkanjai {
+        #if AT_COMPILE_TIME {
+            if !generate_vulkanjai_backend()  return false;
+        } else {
+            log_error("The VulkanJai backend can only be generated at compile time, its shaders are compiled by a workspace. Set AT_COMPILE_TIME or pass -no_vulkanjai.");
+            return false;
+        }
+    }
+
+    return true;
 }
 
 begin_end_string_args: [..]*Declaration;
@@ -184,12 +197,28 @@ imgui_visitor :: (decl: *Declaration, parent_decl: *Declaration) -> Declaration_
         }
     }
 
+    // The template arguments of a member like "ImSmallStack_<ImDrawFlags,3> _DrawFlagsStack" end up as its initializer ("= 3").
+    if parent_decl && parent_decl.kind == .STRUCT && decl.kind == .DECLARATION && decl.expression && decl.type {
+        struct_type := find_underlying_type(decl.type).type_of_struct;
+        if struct_type && struct_type.name == "ImSmallStack_"  decl.expression = null;
+    }
+
     if decl.kind == .ENUM {
         // ImGui has lots of enums that should be enum flags. Luckily, they all end in "…Flags_".
         if ends_with(decl.name, "Flags_") {
             en := cast(*Enum)decl;
             en.flags |= .IS_ENUM_FLAGS;
             en.flags |= .VALUES_IN_HEX;
+
+            // Some masks are negative in C (ImDrawFlags_InvalidMask_ = ~0x7FFFFFF0), they would be printed as 64 bit hex,
+            // which doesn't fit the enum_flags. Use their 32 bit pattern (0x8000000F) instead.
+            for en.enumerates {
+                if !it.expression || it.expression.kind != .LITERAL  continue;
+                literal := cast(*Literal) it.expression;
+                if literal.literal_kind == .INTEGER && literal.int_value < 0 {
+                    literal.int_value = literal.int_value & 0xFFFF_FFFF;
+                }
+            }
         }
     }
 
@@ -274,11 +303,125 @@ imgui_get_function_arg_for_printing :: (func: *Function, type: *Function_Type, m
     return args;
 }
 
+// The VulkanJai backend is written in backends/vulkanjai/. Its shaders are compiled to SPIR-V with ApilaSpirv,
+// and the backend, the code it shares with the shaders and the SPIR-V are put together into one file.
+VULKANJAI_BACKEND_PATH      :: "backends/vulkanjai";
+VULKANJAI_SHADER_BUILD_PATH :: ".build/vulkanjai";
+VULKANJAI_OUTPUT_FILENAME   :: "imgui_impl_vulkanjai.jai";
+
+#if AT_COMPILE_TIME {
+    ApilaSpirv :: #import "ApilaSpirv";
+
+    // The entry points in shaders.jai (ApilaSpirv names the output files after them), and the names of their SPIR-V in the generated file.
+    VULKANJAI_SHADERS :: struct { entry_point: string; constant_name: string; }.[
+        .{ "ImGui_ImplVulkanJai_Mesh",     "IMGUI_IMPL_VULKANJAI_MESH_SPIRV" },
+        .{ "ImGui_ImplVulkanJai_Fragment", "IMGUI_IMPL_VULKANJAI_FRAGMENT_SPIRV" },
+    ];
+
+    generate_vulkanjai_backend :: () -> bool {
+        make_directory_if_it_does_not_exist(VULKANJAI_SHADER_BUILD_PATH, recursive = true);
+
+        // So a stale .spv can't be baked if the compilation doesn't output it.
+        for file_list(VULKANJAI_SHADER_BUILD_PATH) {
+            if ends_with(it, ".spv")  file_delete(it);
+        }
+
+        root_options := get_build_options();
+        w := compiler_create_workspace("ImGui VulkanJai backend shaders");
+        if !w {
+            log_error("Couldn't create the workspace for the shaders of the VulkanJai backend.");
+            return false;
+        }
+
+        options := get_build_options(w);
+        copy_commonly_propagated_fields(root_options, *options);
+        options.output_type = .NO_OUTPUT;
+        set_build_options(options, w);
+
+        shader_options := ApilaSpirv.GetBuildOptions(w);
+        shader_options.buildFolder = VULKANJAI_SHADER_BUILD_PATH;
+        ApilaSpirv.SetBuildOptions(shader_options, w);
+
+        compiled := false;
+        {
+            compiler_begin_intercept(w);
+            defer compiler_end_intercept(w);
+
+            add_build_file(tprint("%/shaders.jai", VULKANJAI_BACKEND_PATH), w);
+
+            while true {
+                message := compiler_wait_for_message();
+                ApilaSpirv.ProcessMessage(message); // writes the .spv files on .COMPLETE
+
+                if message.kind == .COMPLETE {
+                    mc := cast(*Message_Complete) message;
+                    compiled = mc.error_code == .NONE;
+                    break;
+                }
+            }
+        }
+
+        if !compiled {
+            log_error("Couldn't compile the shaders of the VulkanJai backend.");
+            return false;
+        }
+
+        builder: String_Builder;
+        print_to_builder(*builder, "// This file is generated by generate.jai from %/. Don't edit it, edit those files and run generate.jai again.\n\n", VULKANJAI_BACKEND_PATH);
+        append(*builder, "// It is loaded by module.jai when the VULKANJAI_BACKEND module parameter is set.\n\n#scope_module\n\n");
+
+        for string.["shared.jai", "backend.jai"] {
+            path := tprint("%/%", VULKANJAI_BACKEND_PATH, it);
+            text, ok := read_entire_file(path);
+            if !ok {
+                log_error("Couldn't read %.", path);
+                return false;
+            }
+
+            print_to_builder(*builder, "// ---- % ----\n\n%\n", path, text);
+        }
+
+        append(*builder, "// ---- SPIR-V of the shaders in shaders.jai ----\n\n");
+        append(*builder, "#scope_file\n\n");
+        for VULKANJAI_SHADERS {
+            path := tprint("%/%.spv", VULKANJAI_SHADER_BUILD_PATH, it.entry_point);
+            spirv, ok := read_entire_file(path);
+            if !ok {
+                log_error("Couldn't read %. Did ApilaSpirv not output the entry point %?", path, it.entry_point);
+                return false;
+            }
+            assert(spirv.count % 4 == 0, "% is not a list of 32 bit words.", path);
+
+            // Words rather than bytes so the code is 4 byte aligned, as Vulkan wants it.
+            words: [] u32;
+            words.data  = xx spirv.data;
+            words.count = spirv.count / 4;
+
+            print_to_builder(*builder, "% :: u32.[", it.constant_name);
+            for word, word_index: words {
+                if word_index % 8 == 0  append(*builder, "\n   ");
+                print_to_builder(*builder, " 0x%,", formatInt(word, base = 16, minimum_digits = 8));
+            }
+            append(*builder, "\n];\n\n");
+        }
+
+        output := builder_to_string(*builder);
+        if !write_entire_file(VULKANJAI_OUTPUT_FILENAME, output) {
+            log_error("Couldn't write %.", VULKANJAI_OUTPUT_FILENAME);
+            return false;
+        }
+
+        log("Generated %.", VULKANJAI_OUTPUT_FILENAME);
+        return true;
+    }
+}
+
 #import "Basic";
 #import "Bindings_Generator";
 #import "BuildCpp";
 #import "Compiler";
 #import "File";
+#import "File_Utilities";
 #import "Hash_Table";
 #import "String";
 
@@ -286,5 +429,6 @@ FOOTER_UNIX :: #string END
 
 #if OS == .MACOS    imgui :: #library "macos/ImGui";
 #if OS == .LINUX    imgui :: #library "linux/ImGui";
+#if OS == .LINUX    #library,system,link_always "libm"; // the static library uses cosf, sinf, fmodf...
 
 END

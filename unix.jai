@@ -1,7 +1,7 @@
 //
 // This file was auto-generated using the following command:
 //
-// jai generate.jai - -compile
+// jai /home/apila/source/jai_modules/Imgui//generate.jai modules +jails_diagnostics import_dir /home/apila/.vscode/extensions/apparentlystudio.jails-0.2.1/out/metaprogram
 //
 
 
@@ -3193,12 +3193,6 @@ Storage :: struct {
     SetAllInt :: (this: *Storage, val: s32) -> void #cpp_method #foreign imgui "_ZN12ImGuiStorage9SetAllIntEi";
 }
 
-// [Internal] Used for small stacks. Do not use.
-ImSmallStack_ :: struct(T: Type, Capacity: s32, SZ_T: Type = xx ImU16) {
-    LocalData: [Capacity] T; // FIXME: should evolve into using heap, e.g union {} with T* HeapData + add SZ_T Capacity.
-    Size:      SZ_T = 0;
-}
-
 // Flags for ImGuiListClipper (currently not fully exposed in function calls: a future refactor will likely add this to ImGuiListClipper::Begin function equivalent)
 ListClipperFlags :: enum_flags u32 {
     None                  :: 0x0;
@@ -3478,7 +3472,7 @@ ImDrawFlags :: enum_flags s32 {
     AllowInPushScope_        :: 0x7e71f0;
     AllowInFrameScope_       :: 0xfe71f0;
     StrokeMask_              :: 0xe0000;
-    InvalidMask_             :: 0xffffffff8000000f;
+    InvalidMask_             :: 0x8000000f;
 
     RoundCornersTopLeft      :: 0x10;
     RoundCornersTopRight     :: 0x20;
@@ -3568,7 +3562,7 @@ ImDrawList :: struct {
     _ClipRectStack:        ImVector(ImVec4); // [Internal]
     _TextureStack:         ImVector(ImTextureRef); // [Internal]
     _CallbacksDataBuf:     ImVector(ImU8); // [Internal]
-    _DrawFlagsStack:       ImSmallStack_(ImDrawFlags, 3) = 3; // [Internal]
+    _DrawFlagsStack:       ImSmallStack_(ImDrawFlags, 3); // [Internal]
     _FringeScale:          float; // [Internal] anti-alias fringe is scaled by this value, this helps to keep things sharp while zooming at vertex buffer content
     _InvFringeScale:       float; // [internal] 1.0 / _FringeScale // FIXME: Consider renaming to _PixelDensity.
     _FringeScaleIsInteger: bool; // [Internal] true if 1/_FringeScale is a whole number, used to select fast path for rendering
@@ -4420,4 +4414,5 @@ ImFontAtlasCustomRect :: ImFontAtlasRect;
 
 #if OS == .MACOS    imgui :: #library "macos/ImGui";
 #if OS == .LINUX    imgui :: #library "linux/ImGui";
+#if OS == .LINUX    #library,system,link_always "libm"; // the static library uses cosf, sinf, fmodf...
 
