@@ -465,7 +465,7 @@ UpdateTexture :: (tex: *ImTextureData) {
 
         debugName := tprint("imgui texture %", tex.UniqueID);
         backendTex := New(Texture);
-        size, alignment := VJ.ImageSizeAndAlignment(description);
+        size, alignment := VJ.GetImageSizeAndAlignment(description);
         _, backendTex.memory = VJ.GpuMalloc(size, alignment, .Gpu, debugName);
         assert(backendTex.memory != 0, "couldn't allocate % bytes for %", size, debugName);
         backendTex.image = VJ.CreateImage(backendTex.memory, description, debugName);
