@@ -463,8 +463,8 @@ UpdateTexture :: (tex: *ImTextureData) {
         VJ.GpuBarrier(cmd, VK_PIPELINE_STAGE_2_TRANSFER_BIT, VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT);
         VJ.Submit(cmd);
 
-        // FIXME-OPT: Suboptimal! Waits for the upload. It only happens when the atlas changes.
-        VJ.WaitAndFree(stagingGpu, .{ VJ.vk.graphicsQueueTimelineSemaphore.semaphore, cmd.doneTimelineValue });
+        // The staging buffer is freed once the upload is done executing on the gpu.
+        VJ.DeferGpuFree(.[.{ timelineValue = cmd.doneTimelineValue, buffer = stagingGpu }]);
 
         SetStatus(tex, .OK);
     }
