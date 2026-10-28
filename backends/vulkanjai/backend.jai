@@ -259,17 +259,18 @@ ImGui_ImplVulkanJai_RenderDrawData :: (draw_data: *ImDrawData, cmd: *VJ.CommandB
             triangleCount := pcmd.ElemCount / 3;
             data := *drawDatas[drawDataIndex];
             data.* = bd.projection;
-            data.vertices = cast(*ImGui_ImplVulkanJai_Vertex) (frame.vertices.gpu + cast(u64) ((globalVertexOffset + pcmd.VtxOffset) * size_of(ImDrawVert)));
-            data.indices = cast(*u16) (frame.indices.gpu + cast(u64) ((globalIndexOffset + pcmd.IdxOffset) * size_of(ImDrawIdx)));
+            data.vertices = cast(*ImGui_ImplVulkanJai_Vertex) (frame.vertices.gpu.data + cast(u64) ((globalVertexOffset + pcmd.VtxOffset) * size_of(ImDrawVert)));
+            data.indices = cast(*u16) (frame.indices.gpu.data + cast(u64) ((globalIndexOffset + pcmd.IdxOffset) * size_of(ImDrawIdx)));
             data.triangleCount = triangleCount;
             data.textureOffset = xx TextureIdToResourceHeapOffset(textureId);
             data.samplerOffset = xx ((bd.samplerIndex + bd.currentSampler) * VJ.vk.samplerDescriptorStride);
 
-            dataGpu := frame.drawData.gpu + cast(u64) (drawDataIndex * size_of(ImGui_ImplVulkanJai_DrawData));
+            // The operators of VJ.GpuPointer are not visible through the VJ namespace, so the arithmetic is done on .data.
+            dataGpu := VJ.GpuPointer(void).{ frame.drawData.gpu.data + cast(u64) (drawDataIndex * size_of(ImGui_ImplVulkanJai_DrawData)) };
             drawDataIndex += 1;
 
             workgroupCount := (triangleCount + IMGUI_IMPL_VULKANJAI_TRIANGLES_PER_WORKGROUP - 1) / IMGUI_IMPL_VULKANJAI_TRIANGLES_PER_WORKGROUP;
-            VJ.DispatchMesh(cmd, 0, dataGpu, dataGpu, workgroupCount, 1, 1);
+            VJ.DispatchMesh(cmd, VJ.GpuPointer(void).{}, dataGpu, dataGpu, workgroupCount, 1, 1);
         }
 
         globalIndexOffset += drawList.IdxBuffer.Size;
@@ -328,7 +329,7 @@ Backend_Data :: struct {
 
 Gpu_Buffer :: struct {
     cpu:   *void;
-    gpu:   u64;
+    gpu:   VJ.GpuPointer(void);
     size:  int;
 }
 
@@ -340,7 +341,7 @@ Frame_Render_Buffers :: struct {
 
 Texture :: struct {
     image:              VJ.Image;
-    memory:             u64; // gpu pointer of the memory of the image
+    memory:             VJ.GpuPointer(void); // the memory of the image
     resourceHeapOffset: int;
 }
 
@@ -389,17 +390,17 @@ EnsureBufferSize :: (buffer: *Gpu_Buffer, size: int, debugName: string) {
     if size <= buffer.size  return;
 
     // The buffer of this frame is not used by the gpu anymore, see the notes at the top.
-    if buffer.gpu  VJ.GpuFree(buffer.gpu);
+    if buffer.gpu.data  VJ.GpuFree(buffer.gpu);
 
     newSize := max(size + size / 2, 4096);
-    buffer.cpu, buffer.gpu = VJ.GpuMalloc(newSize, 16, .Default, debugName);
+    buffer.gpu, buffer.cpu = VJ.GpuMalloc(newSize, 16, .Default, debugName);
     assert(buffer.cpu != null, "couldn't allocate % bytes for %", newSize, debugName);
     buffer.size = newSize;
 }
 
 DestroyFrameRenderBuffers :: (frame: *Frame_Render_Buffers) {
     for * (*Gpu_Buffer).[*frame.vertices, *frame.indices, *frame.drawData] {
-        if it.*.gpu  VJ.GpuFree(it.*.gpu);
+        if it.*.gpu.data  VJ.GpuFree(it.*.gpu);
         it.*.* = .{};
     }
 }
@@ -424,9 +425,9 @@ UpdateTexture :: (tex: *ImTextureData) {
 
         debugName := tprint("imgui texture %", tex.UniqueID);
         backendTex := New(Texture);
-        size, alignment := VJ.ImageSizeAndAlignment(description);
-        _, backendTex.memory = VJ.GpuMalloc(size, alignment, .Gpu, debugName);
-        assert(backendTex.memory != 0, "couldn't allocate % bytes for %", size, debugName);
+        size, alignment := VJ.GetImageSizeAndAlignment(description);
+        backendTex.memory = VJ.GpuMalloc(size, alignment, .Gpu, debugName);
+        assert(backendTex.memory.data != 0, "couldn't allocate % bytes for %", size, debugName);
         backendTex.image = VJ.CreateImage(backendTex.memory, description, debugName);
         backendTex.resourceHeapOffset = VJ.WriteImageDescriptors(.[backendTex.image], .Sampled);
 
@@ -451,7 +452,7 @@ UpdateTexture :: (tex: *ImTextureData) {
         texturePitch := tex.Width * tex.BytesPerPixel;
         uploadSize := uploadH * uploadPitch;
 
-        stagingCpu, stagingGpu := VJ.GpuMalloc(uploadSize, 16, .Default, "imgui texture upload");
+        stagingGpu, stagingCpu := VJ.GpuMalloc(uploadSize, 16, .Default, "imgui texture upload");
         assert(stagingCpu != null, "couldn't allocate % bytes for the texture upload", uploadSize);
         for y: 0..uploadH - 1 {
             source := tex.Pixels + (uploadX * tex.BytesPerPixel) + (uploadY + y) * texturePitch;
