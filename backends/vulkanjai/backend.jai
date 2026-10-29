@@ -259,18 +259,17 @@ ImGui_ImplVulkanJai_RenderDrawData :: (draw_data: *ImDrawData, cmd: *VJ.CommandB
             triangleCount := pcmd.ElemCount / 3;
             data := *drawDatas[drawDataIndex];
             data.* = bd.projection;
-            data.vertices = cast(*ImGui_ImplVulkanJai_Vertex) (frame.vertices.gpu.data + cast(u64) ((globalVertexOffset + pcmd.VtxOffset) * size_of(ImDrawVert)));
-            data.indices = cast(*u16) (frame.indices.gpu.data + cast(u64) ((globalIndexOffset + pcmd.IdxOffset) * size_of(ImDrawIdx)));
+            data.vertices = cast(*ImGui_ImplVulkanJai_Vertex) (frame.vertices.gpu + cast(u64) ((globalVertexOffset + pcmd.VtxOffset) * size_of(ImDrawVert)));
+            data.indices = cast(*u16) (frame.indices.gpu + cast(u64) ((globalIndexOffset + pcmd.IdxOffset) * size_of(ImDrawIdx)));
             data.triangleCount = triangleCount;
             data.textureOffset = xx TextureIdToResourceHeapOffset(textureId);
             data.samplerOffset = xx ((bd.samplerIndex + bd.currentSampler) * VJ.vk.samplerDescriptorStride);
 
-            // The operators of VJ.GpuPointer are not visible through the VJ namespace, so the arithmetic is done on .data.
-            dataGpu := VJ.GpuPointer(void).{ frame.drawData.gpu.data + cast(u64) (drawDataIndex * size_of(ImGui_ImplVulkanJai_DrawData)) };
+            dataGpu := frame.drawData.gpu + cast(u64) (drawDataIndex * size_of(ImGui_ImplVulkanJai_DrawData));
             drawDataIndex += 1;
 
             workgroupCount := (triangleCount + IMGUI_IMPL_VULKANJAI_TRIANGLES_PER_WORKGROUP - 1) / IMGUI_IMPL_VULKANJAI_TRIANGLES_PER_WORKGROUP;
-            VJ.DispatchMesh(cmd, VJ.GpuPointer(void).{}, dataGpu, dataGpu, workgroupCount, 1, 1);
+            VJ.DispatchMesh(cmd, 0, dataGpu, dataGpu, workgroupCount, 1, 1);
         }
 
         globalIndexOffset += drawList.IdxBuffer.Size;
@@ -329,7 +328,7 @@ Backend_Data :: struct {
 
 Gpu_Buffer :: struct {
     cpu:   *void;
-    gpu:   VJ.GpuPointer(void);
+    gpu:   u64;
     size:  int;
 }
 
@@ -341,7 +340,7 @@ Frame_Render_Buffers :: struct {
 
 Texture :: struct {
     image:              VJ.Image;
-    memory:             VJ.GpuPointer(void); // the memory of the image
+    memory:             u64; // gpu pointer of the memory of the image
     resourceHeapOffset: int;
 }
 
@@ -390,7 +389,7 @@ EnsureBufferSize :: (buffer: *Gpu_Buffer, size: int, debugName: string) {
     if size <= buffer.size  return;
 
     // The buffer of this frame is not used by the gpu anymore, see the notes at the top.
-    if buffer.gpu.data  VJ.GpuFree(buffer.gpu);
+    if buffer.gpu  VJ.GpuFree(buffer.gpu);
 
     newSize := max(size + size / 2, 4096);
     buffer.gpu, buffer.cpu = VJ.GpuMalloc(newSize, 16, .Default, debugName);
@@ -400,7 +399,7 @@ EnsureBufferSize :: (buffer: *Gpu_Buffer, size: int, debugName: string) {
 
 DestroyFrameRenderBuffers :: (frame: *Frame_Render_Buffers) {
     for * (*Gpu_Buffer).[*frame.vertices, *frame.indices, *frame.drawData] {
-        if it.*.gpu.data  VJ.GpuFree(it.*.gpu);
+        if it.*.gpu  VJ.GpuFree(it.*.gpu);
         it.*.* = .{};
     }
 }
@@ -427,7 +426,7 @@ UpdateTexture :: (tex: *ImTextureData) {
         backendTex := New(Texture);
         size, alignment := VJ.GetImageSizeAndAlignment(description);
         backendTex.memory = VJ.GpuMalloc(size, alignment, .Gpu, debugName);
-        assert(backendTex.memory.data != 0, "couldn't allocate % bytes for %", size, debugName);
+        assert(backendTex.memory != 0, "couldn't allocate % bytes for %", size, debugName);
         backendTex.image = VJ.CreateImage(backendTex.memory, description, debugName);
         backendTex.resourceHeapOffset = VJ.WriteImageDescriptors(.[backendTex.image], .Sampled);
 
