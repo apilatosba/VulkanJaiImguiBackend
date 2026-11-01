@@ -1,7 +1,7 @@
 //
 // This file was auto-generated using the following command:
 //
-// jai generate.jai
+// jai /home/apila/source/jai_modules/Imgui//generate.jai modules +jails_diagnostics import_dir /home/apila/.vscode/extensions/apparentlystudio.jails-0.2.1/out/metaprogram
 //
 
 
@@ -36,15 +36,6 @@ ImS32 :: s32;
 ImU32 :: u32;
 ImS64 :: s64;
 ImU64 :: u64;
-
-ImDrawListSharedData :: struct #type_info_none {}
-
-ImFontAtlasBuilder :: struct #type_info_none {}
-
-ImFontLoader :: struct #type_info_none {}
-
-// Forward declarations: ImGui layer
-ImGuiContext :: struct #type_info_none {}
 
 // Enumerations
 // - We don't use strongly typed enums much because they add constraints (can't extend in private code, can't store typed in bit fields, extra casting on iteration)
@@ -1557,6 +1548,30 @@ GetContentRegionMax :: () -> ImVec2 #foreign imgui "_ZN5ImGui19GetContentRegionM
 GetWindowContentRegionMin :: () -> ImVec2 #foreign imgui "_ZN5ImGui25GetWindowContentRegionMinEv";
 GetWindowContentRegionMax :: () -> ImVec2 #foreign imgui "_ZN5ImGui25GetWindowContentRegionMaxEv";
 
+// Docking - Builder function needs to be generally called before the node is used/submitted.
+// - The DockBuilderXXX functions are designed to _eventually_ become a public API, but it is too early to expose it and guarantee stability.
+// - Do not hold on ImGuiDockNode* pointers! They may be invalidated by any split/merge/remove operation and every frame.
+// - To create a DockSpace() node, make sure to set the ImGuiDockNodeFlags_DockSpace flag when calling DockBuilderAddNode().
+//   You can create dockspace nodes (attached to a window) _or_ floating nodes (carry its own window) with this API.
+// - DockBuilderSplitNode() create 2 child nodes within 1 node. The initial node becomes a parent node.
+// - If you intend to split the node immediately after creation using DockBuilderSplitNode(), make sure
+//   to call DockBuilderSetNodeSize() beforehand. If you don't, the resulting split sizes may not be reliable.
+// - Call DockBuilderFinish() after you are done.
+DockBuilderDockWindow :: (window_name: *u8, node_id: ID) -> void #foreign imgui "_ZN5ImGui21DockBuilderDockWindowEPKcj";
+DockBuilderGetNode :: (node_id: ID) -> *DockNode #foreign imgui "_ZN5ImGui18DockBuilderGetNodeEj";
+
+DockBuilderAddNode :: (node_id: ID = 0, flags: DockNodeFlags = .None) -> ID #foreign imgui "_ZN5ImGui18DockBuilderAddNodeEji";
+DockBuilderRemoveNode :: (node_id: ID) -> void #foreign imgui "_ZN5ImGui21DockBuilderRemoveNodeEj";
+DockBuilderRemoveNodeDockedWindows :: (node_id: ID, clear_settings_refs := true) -> void #foreign imgui "_ZN5ImGui34DockBuilderRemoveNodeDockedWindowsEjb";
+DockBuilderRemoveNodeChildNodes :: (node_id: ID) -> void #foreign imgui "_ZN5ImGui31DockBuilderRemoveNodeChildNodesEj";
+DockBuilderSetNodePos :: (node_id: ID, pos: ImVec2) -> void #foreign imgui "_ZN5ImGui21DockBuilderSetNodePosEj6ImVec2";
+DockBuilderSetNodeSize :: (node_id: ID, size: ImVec2) -> void #foreign imgui "_ZN5ImGui22DockBuilderSetNodeSizeEj6ImVec2";
+DockBuilderSplitNode :: (node_id: ID, split_dir: Dir, size_ratio_for_node_at_dir: float, out_id_at_dir: *ID, out_id_at_opposite_dir: *ID) -> ID #foreign imgui "_ZN5ImGui20DockBuilderSplitNodeEj8ImGuiDirfPjS1_";
+DockBuilderCopyDockSpace :: (src_dockspace_id: ID, dst_dockspace_id: ID, in_window_remap_pairs: *ImVector(*u8)) -> void #foreign imgui "_ZN5ImGui24DockBuilderCopyDockSpaceEjjP8ImVectorIPKcE";
+DockBuilderCopyNode :: (src_node_id: ID, dst_node_id: ID, out_node_remap_pairs: *ImVector(ID)) -> void #foreign imgui "_ZN5ImGui19DockBuilderCopyNodeEjjP8ImVectorIjE";
+DockBuilderCopyWindowSettings :: (src_name: *u8, dst_name: *u8) -> void #foreign imgui "_ZN5ImGui29DockBuilderCopyWindowSettingsEPKcS1_";
+DockBuilderFinish :: (node_id: ID) -> void #foreign imgui "_ZN5ImGui17DockBuilderFinishEj";
+
 // Flags for ImGui::Begin()
 // (Those are per-window flags. There are shared flags in ImGuiIO: io.ConfigWindowsResizeFromEdges and io.ConfigWindowsMoveFromTitleBarOnly)
 WindowFlags :: enum_flags u32 {
@@ -2038,31 +2053,75 @@ HoveredFlags :: enum_flags u32 {
 // (Some flags can be applied to individual nodes directly)
 // FIXME-DOCK: Also see ImGuiDockNodeFlagsPrivate_ which may involve using the WIP and internal DockBuilder api.
 DockNodeFlags :: enum_flags u32 {
-    None                     :: 0x0;
-    KeepAliveOnly            :: 0x1;
+    None                      :: 0x0;
+    KeepAliveOnly             :: 0x1;
 
-    NoDockingOverCentralNode :: 0x4;
-    PassthruCentralNode      :: 0x8;
-    NoDockingSplit           :: 0x10;
-    NoResize                 :: 0x20;
-    AutoHideTabBar           :: 0x40;
-    NoUndocking              :: 0x80;
+    NoDockingOverCentralNode  :: 0x4;
+    PassthruCentralNode       :: 0x8;
+    NoDockingSplit            :: 0x10;
+    NoResize                  :: 0x20;
+    AutoHideTabBar            :: 0x40;
+    NoUndocking               :: 0x80;
 
-    NoSplit                  :: 0x10;
-    NoDockingInCentralNode   :: 0x4;
+    NoSplit                   :: 0x10;
+    NoDockingInCentralNode    :: 0x4;
 
-    ImGuiDockNodeFlags_None                     :: None;
-    ImGuiDockNodeFlags_KeepAliveOnly            :: KeepAliveOnly;
+    DockSpace                 :: 0x400;
+    CentralNode               :: 0x800;
+    NoTabBar                  :: 0x1000;
+    HiddenTabBar              :: 0x2000;
+    NoWindowMenuButton        :: 0x4000;
+    NoCloseButton             :: 0x8000;
+    NoResizeX                 :: 0x10000;
+    NoResizeY                 :: 0x20000;
+    DockedWindowsInFocusRoute :: 0x40000;
 
-    ImGuiDockNodeFlags_NoDockingOverCentralNode :: NoDockingOverCentralNode;
-    ImGuiDockNodeFlags_PassthruCentralNode      :: PassthruCentralNode;
-    ImGuiDockNodeFlags_NoDockingSplit           :: NoDockingSplit;
-    ImGuiDockNodeFlags_NoResize                 :: NoResize;
-    ImGuiDockNodeFlags_AutoHideTabBar           :: AutoHideTabBar;
-    ImGuiDockNodeFlags_NoUndocking              :: NoUndocking;
+    NoDockingSplitOther       :: 0x80000;
+    NoDockingOverMe           :: 0x100000;
+    NoDockingOverOther        :: 0x200000;
+    NoDockingOverEmpty        :: 0x400000;
+    NoDocking                 :: 0x780010;
 
-    ImGuiDockNodeFlags_NoSplit                  :: NoSplit;
-    ImGuiDockNodeFlags_NoDockingInCentralNode   :: NoDockingInCentralNode;
+    SharedFlagsInheritMask_   :: 0xffffffff;
+    NoResizeFlagsMask_        :: 0x30020;
+
+    LocalFlagsTransferMask_   :: 0x3f870;
+    SavedFlagsMask_           :: 0x3fc20;
+
+    ImGuiDockNodeFlags_None                      :: None;
+    ImGuiDockNodeFlags_KeepAliveOnly             :: KeepAliveOnly;
+
+    ImGuiDockNodeFlags_NoDockingOverCentralNode  :: NoDockingOverCentralNode;
+    ImGuiDockNodeFlags_PassthruCentralNode       :: PassthruCentralNode;
+    ImGuiDockNodeFlags_NoDockingSplit            :: NoDockingSplit;
+    ImGuiDockNodeFlags_NoResize                  :: NoResize;
+    ImGuiDockNodeFlags_AutoHideTabBar            :: AutoHideTabBar;
+    ImGuiDockNodeFlags_NoUndocking               :: NoUndocking;
+
+    ImGuiDockNodeFlags_NoSplit                   :: NoSplit;
+    ImGuiDockNodeFlags_NoDockingInCentralNode    :: NoDockingInCentralNode;
+
+    ImGuiDockNodeFlags_DockSpace                 :: DockSpace;
+    ImGuiDockNodeFlags_CentralNode               :: CentralNode;
+    ImGuiDockNodeFlags_NoTabBar                  :: NoTabBar;
+    ImGuiDockNodeFlags_HiddenTabBar              :: HiddenTabBar;
+    ImGuiDockNodeFlags_NoWindowMenuButton        :: NoWindowMenuButton;
+    ImGuiDockNodeFlags_NoCloseButton             :: NoCloseButton;
+    ImGuiDockNodeFlags_NoResizeX                 :: NoResizeX;
+    ImGuiDockNodeFlags_NoResizeY                 :: NoResizeY;
+    ImGuiDockNodeFlags_DockedWindowsInFocusRoute :: DockedWindowsInFocusRoute;
+
+    ImGuiDockNodeFlags_NoDockingSplitOther       :: NoDockingSplitOther;
+    ImGuiDockNodeFlags_NoDockingOverMe           :: NoDockingOverMe;
+    ImGuiDockNodeFlags_NoDockingOverOther        :: NoDockingOverOther;
+    ImGuiDockNodeFlags_NoDockingOverEmpty        :: NoDockingOverEmpty;
+    ImGuiDockNodeFlags_NoDocking                 :: NoDocking;
+
+    ImGuiDockNodeFlags_SharedFlagsInheritMask_   :: SharedFlagsInheritMask_;
+    ImGuiDockNodeFlags_NoResizeFlagsMask_        :: NoResizeFlagsMask_;
+
+    ImGuiDockNodeFlags_LocalFlagsTransferMask_   :: LocalFlagsTransferMask_;
+    ImGuiDockNodeFlags_SavedFlagsMask_           :: SavedFlagsMask_;
 }
 
 // Flags for ImGui::BeginDragDropSource(), ImGui::AcceptDragDropPayload()
@@ -3275,8 +3334,6 @@ OnceUponAFrame :: struct #type_info_none {
     RefFrame: s32;
 }
 
-// Helper: Parse and apply text filters e.g. 'aaa bbb' (all), 'aaa,bbb' (any), '-aaa' (exclude), '"Hello, world"' (exact sequence)
-TextFilterItem :: struct #type_info_none {}
 TextFilter :: struct #type_info_none {
     Constructor :: (this: *TextFilter, default_filter: *u8 = "") -> void #cpp_method #foreign imgui "_ZN15ImGuiTextFilterC1EPKc";
     PassFilter :: (this: *TextFilter, text: *u8, text_end: *u8 = null) -> bool #cpp_method #foreign imgui "_ZNK15ImGuiTextFilter10PassFilterEPKcS1_";
@@ -4637,6 +4694,18 @@ ImDrawListFlags :: enum_flags u32 {
 // - ImFontAtlasCustomRect::GlyphColored --> if you need to write to this, instead you can write to 'font->Glyphs.back()->Colored' after calling AddCustomRectFontGlyph()
 // We could make ImTextureRect an union to use old names, but 1) this would be confusing 2) the fix is easy 3) ImFontAtlasCustomRect was always a rather esoteric api.
 ImFontAtlasCustomRect :: ImFontAtlasRect;
+
+TextFilterItem :: struct #type_info_none {}
+
+ImDrawListSharedData :: struct #type_info_none {}
+
+DockNode :: struct #type_info_none {}
+
+ImGuiContext :: struct #type_info_none {}
+
+ImFontLoader :: struct #type_info_none {}
+
+ImFontAtlasBuilder :: struct #type_info_none {}
 
 #scope_file
 

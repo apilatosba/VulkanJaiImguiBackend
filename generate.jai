@@ -21,6 +21,22 @@ DECLARATIONS_TO_OMIT :: string.[
     "ImDrawCallback_ResetRenderState", // casting an integer to a function pointer is not supported in Jai.
 ];
 
+// imgui_internal.h is parsed only for these. Everything else in it is omitted.
+INTERNAL_FUNCTION_PREFIXES_TO_KEEP :: string.[
+    "DockBuilder", // ImGui::DockBuilderXXX, to build dock layouts from code
+];
+
+// Returned by the kept internal functions, generated without fields (only usable through pointers).
+// The structs that imgui.h forward declares (ImGuiContext...) but imgui_internal.h defines are also generated without fields, like when only imgui.h is parsed.
+INTERNAL_OPAQUE_STRUCTS :: string.[
+    "ImGuiDockNode",
+];
+
+// The values of these internal enums are added to the public enum, e.g. ImGuiDockNodeFlags_DockSpace, which DockBuilderAddNode() needs.
+INTERNAL_ENUMS_TO_MERGE :: struct { internal: string; public: string; }.[
+    .{ "ImGuiDockNodeFlagsPrivate_", "ImGuiDockNodeFlags_" },
+];
+
 #if AT_COMPILE_TIME {
     #run,stallable {
         set_build_options_dc(.{do_output=false});
@@ -83,6 +99,9 @@ generate_bindings :: (args: [] string) -> bool {
 
     defer array_reset(*begin_end_string_args);
 
+    public_forward_declarations = collect_forward_declarations(tprint("%/imgui.h", IMGUI_PATH));
+    defer array_reset(*public_forward_declarations);
+
     output_filename: string;
     options: Generate_Bindings_Options;
     {
@@ -107,6 +126,7 @@ generate_bindings :: (args: [] string) -> bool {
         array_add(*libraries,     .{filename="ImGui"});
         array_add(*include_paths, IMGUI_PATH);
         array_add(*source_files,  tprint("%/imgui.h", IMGUI_PATH));
+        array_add(*source_files,  tprint("%/imgui_internal.h", IMGUI_PATH)); // only for the declarations in INTERNAL_*, see imgui_visitor
         array_add(*extra_clang_arguments, "-x", "c++", "-DWIN32_LEAN_AND_MEAN");
         array_add(*flatten_namespaces, "ImGui");
         array_add(*strip_prefixes, "ImGui");
@@ -135,6 +155,8 @@ generate_bindings :: (args: [] string) -> bool {
 
 begin_end_string_args: [..]*Declaration;
 
+public_forward_declarations: [..] string; // "struct ImGuiContext;" in imgui.h
+
 enums_for_typedefs: Table(string, *Enum);
 
 imgui_visitor :: (decl: *Declaration, parent_decl: *Declaration) -> Declaration_Visit_Result {
@@ -147,6 +169,18 @@ imgui_visitor :: (decl: *Declaration, parent_decl: *Declaration) -> Declaration_
             return tprint("%_", name);
         }
         return name;
+    }
+
+    // From imgui_internal.h we only want what's listed in INTERNAL_*. (The namespaces are not omitted, they are merged with the ones of imgui.h.)
+    if (!parent_decl || parent_decl.kind == .NAMESPACE) && decl.kind != .NAMESPACE {
+        if is_from_internal_header(decl) {
+            if !keep_internal_declaration(decl) {
+                decl.decl_flags |= .OMIT_FROM_OUTPUT;
+                return .STOP;
+            }
+        } else if is_from_internal_header(decl.comment.location.file) {
+            decl.comment = .{}; // declared again in imgui_internal.h (typedef int ImDrawTextFlags;), the comment is from there
+        }
     }
 
     if !parent_decl {
@@ -164,6 +198,7 @@ imgui_visitor :: (decl: *Declaration, parent_decl: *Declaration) -> Declaration_
                 new_name := get_associated_enum_name(old_name);
                 for context.generator.global_scope.members {
                     if it.kind != .ENUM  || it.name != new_name     continue;
+                    if is_from_internal_header(it)  continue; // omitted, e.g. ImDrawTextFlags_
 
                     en := cast(*Enum)it;
 
@@ -217,16 +252,7 @@ imgui_visitor :: (decl: *Declaration, parent_decl: *Declaration) -> Declaration_
             en := cast(*Enum)decl;
             en.flags |= .IS_ENUM_FLAGS;
             en.flags |= .VALUES_IN_HEX;
-
-            // Some masks are negative in C (ImDrawFlags_InvalidMask_ = ~0x7FFFFFF0), they would be printed as 64 bit hex,
-            // which doesn't fit the enum_flags. Use their 32 bit pattern (0x8000000F) instead.
-            for en.enumerates {
-                if !it.expression || it.expression.kind != .LITERAL  continue;
-                literal := cast(*Literal) it.expression;
-                if literal.literal_kind == .INTEGER && literal.int_value < 0 {
-                    literal.int_value = literal.int_value & 0xFFFF_FFFF;
-                }
-            }
+            for en.enumerates  fix_negative_flag_value(it);
         }
     }
 
@@ -258,6 +284,103 @@ imgui_visitor :: (decl: *Declaration, parent_decl: *Declaration) -> Declaration_
     }
 
     return .RECURSE;
+}
+
+// Some masks are negative in C (ImDrawFlags_InvalidMask_ = ~0x7FFFFFF0), they would be printed as 64 bit hex,
+// which doesn't fit the enum_flags. Use their 32 bit pattern (0x8000000F) instead.
+fix_negative_flag_value :: (enumerate: *Declaration) {
+    if !enumerate.expression || enumerate.expression.kind != .LITERAL  return;
+    literal := cast(*Literal) enumerate.expression;
+    if literal.literal_kind == .INTEGER && literal.int_value < 0 {
+        literal.int_value = literal.int_value & 0xFFFF_FFFF;
+    }
+}
+
+is_from_internal_header :: (decl: *Declaration) -> bool {
+    return is_from_internal_header(decl.location.file);
+}
+
+is_from_internal_header :: (file: CXFile) -> bool {
+    if !file  return false;
+    filename_clang := clang_getFileName(file);
+    defer clang_disposeString(filename_clang);
+    filename := to_string(clang_getCString(filename_clang));
+    return ends_with(filename, "imgui_internal.h");
+}
+
+// The names of the structs declared with "struct Name;" in the header.
+collect_forward_declarations :: (path: string) -> [..] string {
+    names: [..] string;
+    text, ok := read_entire_file(path);
+    if !ok {
+        log_error("Couldn't read %.", path);
+        return names;
+    }
+
+    for line: split(text, "\n",, temp) {
+        rest := trim(line);
+        if !begins_with(rest, "struct ")  continue;
+        advance(*rest, "struct ".count);
+
+        semicolon := find_index_from_left(rest, #char ";");
+        if semicolon < 0  continue;
+        name := trim(slice(rest, 0, semicolon));
+        is_identifier := name.count > 0;
+        for name  if !is_alnum(it) && it != #char "_"  is_identifier = false;
+        if !is_identifier  continue; // not a forward declaration, e.g. "struct ImVec2 { float x, y; };"
+
+        array_add(*names, name);
+    }
+    return names;
+}
+
+// Returns whether the top level declaration of imgui_internal.h should be in the bindings.
+keep_internal_declaration :: (decl: *Declaration) -> bool {
+    if decl.kind == {
+        case .FUNCTION;
+            for INTERNAL_FUNCTION_PREFIXES_TO_KEEP {
+                if begins_with(decl.name, it)  return true;
+            }
+
+        case .STRUCT;
+            s := cast(*Struct) decl;
+            if array_find(INTERNAL_OPAQUE_STRUCTS, decl.name) || array_find(public_forward_declarations, decl.name) {
+                array_reset(*s.declarations);
+                array_reset(*s.parents);
+                decl.comment = .{}; // the comment of the definition is about the fields (e.g. "sizeof() 176~216")
+                return true;
+            }
+
+            // The generator adds a "__RAW" variant to structs that are inherited from (ImGuiViewport by ImGuiViewportP). It isn't needed when the subclass is omitted.
+            for s.parents {
+                parent := find_underlying_type(it.type).type_of_struct;
+                if parent && !is_from_internal_header(parent)  parent.flags &= ~.MAY_HAVE_SUBCLASS;
+            }
+
+        case .ENUM;
+            for INTERNAL_ENUMS_TO_MERGE {
+                if decl.name != it.internal  continue;
+
+                for public_decl: context.generator.global_scope.members {
+                    if public_decl.kind != .ENUM || public_decl.name != it.public  continue;
+
+                    // The public enum was visited already, so its flags are set and its values fixed.
+                    public_enum := cast(*Enum) public_decl;
+                    for enumerate: (cast(*Enum) decl).enumerates {
+                        enumerate.parent = public_enum;
+                        // Strip the prefix like the generator does for the public values: ImGuiDockNodeFlags_DockSpace -> DockSpace
+                        if begins_with(enumerate.name, it.public)  enumerate.output_name = slice(enumerate.name, it.public.count, enumerate.name.count - it.public.count);
+                        if public_enum.flags & .IS_ENUM_FLAGS  fix_negative_flag_value(enumerate);
+                        array_add(*public_enum.enumerates, enumerate);
+                    }
+                    return false; // its values are in the public enum now
+                }
+
+                log_error("Couldn't find the enum % to merge % into.", it.public, it.internal);
+            }
+    }
+
+    return false;
 }
 
 // Modify function with _begin and _end string arguments as they get printed.
