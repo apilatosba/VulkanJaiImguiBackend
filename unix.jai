@@ -4707,6 +4707,9 @@ ImFontLoader :: struct #type_info_none {}
 
 ImFontAtlasBuilder :: struct #type_info_none {}
 
+GetActiveID :: () -> ID #foreign imgui "_ZN13ImGuiWrappers11GetActiveIDEv";
+GetFocusID :: () -> ID #foreign imgui "_ZN13ImGuiWrappers10GetFocusIDEv";
+
 #scope_file
 
 #import "Basic"; // For print_to_builder

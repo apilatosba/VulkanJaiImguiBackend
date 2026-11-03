@@ -2,6 +2,7 @@
 // The SPIR-V is baked into imgui_impl_vulkanjai.jai, so you only need to run generate.jai again if you change this file.
 
 #import "ApilaSpirv";
+#import "Math";
 #load "shared.jai";
 
 ImGui_ImplVulkanJai_MeshOutVertex :: struct {

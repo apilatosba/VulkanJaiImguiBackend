@@ -2,6 +2,11 @@ AT_COMPILE_TIME :: true;
 
 IMGUI_PATH :: "source";
 
+// Real functions wrapping the inline functions of imgui_internal.h (like GetActiveID), which have no symbol in the library.
+// The .cpp is compiled into the library and the .h is parsed for the bindings. To wrap another inline function, add it to both.
+WRAPPERS_PATH       :: "wrappers";
+WRAPPERS_NAMESPACE  :: "ImGuiWrappers"; // flattened, so the wrappers get the names of the functions they wrap
+
 // Puts #type_info_none on the generated structs. Without Type_Info the structs can't be printed or inspected at runtime,
 // but the executable is smaller and the compiler doesn't complain about big structs like ImDrawList.
 STRUCTS_TYPE_INFO_NONE :: true;
@@ -71,6 +76,7 @@ generate_bindings :: (args: [] string) -> bool {
         array_add(*imgui_src_files, tprint("%/imgui_tables.cpp", IMGUI_PATH));
         // @ToDo: Maybe add an option to exclude imgui_demo?
         array_add(*imgui_src_files, tprint("%/imgui_demo.cpp", IMGUI_PATH));
+        array_add(*imgui_src_files, tprint("%/imgui_internal_wrappers.cpp", WRAPPERS_PATH));
 
         success := true;
         #if OS == .WINDOWS {
@@ -127,8 +133,10 @@ generate_bindings :: (args: [] string) -> bool {
         array_add(*include_paths, IMGUI_PATH);
         array_add(*source_files,  tprint("%/imgui.h", IMGUI_PATH));
         array_add(*source_files,  tprint("%/imgui_internal.h", IMGUI_PATH)); // only for the declarations in INTERNAL_*, see imgui_visitor
+        array_add(*source_files,  tprint("%/imgui_internal_wrappers.h", WRAPPERS_PATH));
         array_add(*extra_clang_arguments, "-x", "c++", "-DWIN32_LEAN_AND_MEAN");
         array_add(*flatten_namespaces, "ImGui");
+        array_add(*flatten_namespaces, WRAPPERS_NAMESPACE);
         array_add(*strip_prefixes, "ImGui");
         auto_detect_enum_prefixes = false;
         log_stripped_declarations = false;
