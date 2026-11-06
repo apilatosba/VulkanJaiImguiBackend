@@ -23,6 +23,13 @@ ImSmallStack_ :: struct (T: Type, Capacity: s32, SZ_T: Type = ImU16) {
     Size:      SZ_T = 0;
 }
 
+// Stands in for the inline constructor ImTextureRef(ImTextureID), which has no symbol to bind. imgui.h asks bindings to provide this helper.
+ImTextureRefFromID :: (tex_id: ImTextureID) -> ImTextureRef #no_context {
+    tex_ref: ImTextureRef;
+    tex_ref._TexID = tex_id;
+    return tex_ref;
+}
+
 #scope_module
 
 #import "Basic";

@@ -286,7 +286,7 @@ ImGui_ImplVulkanJai_RenderDrawData :: (draw_data: *ImDrawData, cmd: *VJ.CommandB
     VJ.SetScissor(cmd, 0, 0, xx fbWidth, xx fbHeight);
 }
 
-// Use this to draw your own images with ImGui.Image() etc. resourceHeapOffset is what WriteImageDescriptors(.., .Sampled) returned.
+// Use this to draw your own images: ImGui.Image(ImGui.ImTextureRefFromID(ImGui_ImplVulkanJai_TextureId(offset)), size) etc. resourceHeapOffset is what WriteImageDescriptors(.., .Sampled) returned.
 // (The offset is stored + 1, because ImTextureID_Invalid is 0 and 0 is a valid offset.)
 ImGui_ImplVulkanJai_TextureId :: (resourceHeapOffset: int) -> ImTextureID {
     return cast(ImTextureID) (resourceHeapOffset + 1);
