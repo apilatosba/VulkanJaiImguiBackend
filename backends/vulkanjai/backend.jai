@@ -594,8 +594,14 @@ UpdateInputEvents :: (bd: *Backend_Data) {
     }
 
     // Mouse. The position of VulkanJai is y up.
+    // A disabled cursor has no meaningful position (it is a virtual one that keeps moving), so report it as
+    // unavailable like ImGui_ImplGlfw_UpdateMouseData does.
     mouse := *window.input.mouse;
-    io.AddMousePosEvent(io, mouse.position.x, cast(float) window.height - mouse.position.y);
+    if glfwGetInputMode(window.window, GLFW_CURSOR) == GLFW_CURSOR_DISABLED {
+        io.AddMousePosEvent(io, -FLOAT32_MAX, -FLOAT32_MAX);
+    } else {
+        io.AddMousePosEvent(io, mouse.position.x, cast(float) window.height - mouse.position.y);
+    }
 
     for 0..MOUSE_BUTTON_COUNT - 1 {
         down := mouse.buttonsDown[it];
