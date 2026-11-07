@@ -1,14 +1,23 @@
 // Dear ImGui: Renderer + Platform Backend for VulkanJai
 //
 // Implemented features:
-//  [X] Renderer: User texture binding. Use ImGui_ImplVulkanJai_TextureId() with the resource heap offset WriteImageDescriptors(.., .Sampled) returned.
+//  [X] Renderer: User texture binding. Use ImGui_ImplVulkanJai_TextureId() with the resource heap index WriteImageDescriptors(.., .Sampled) returned.
 //  [X] Renderer: Large meshes support (64k+ vertices) even with 16-bit indices (ImGuiBackendFlags_RendererHasVtxOffset).
 //  [X] Renderer: Texture updates support for dynamic font atlas (ImGuiBackendFlags_RendererHasTextures).
 //  [X] Renderer: Standard draw callbacks: DrawCallback_ResetRenderState, DrawCallback_SetSamplerLinear, DrawCallback_SetSamplerNearest.
 //  [X] Platform: Keyboard, mouse, text input, focus, clipboard and mouse cursor shapes (ImGuiBackendFlags_HasMouseCursors).
 //
-// The triangles are drawn with a mesh shader (one invocation per triangle) and a fragment shader, written in Jai and compiled with ApilaSpirv.
+// The triangles are drawn with a mesh shader (one invocation per triangle) and a fragment shader, written in Jai with ApilaSpirv (shaders.jai).
 // The textures and the samplers are in VulkanJai's descriptor heaps.
+//
+// The shaders are baked by the VulkanJai metaprogram, so the build script of your program has to give the messages of the workspace to it:
+//     VulkanJai :: #import "VulkanJai"(METAPROGRAM = true);
+//     ...
+//     while true {
+//         message := compiler_wait_for_message();
+//         VulkanJai.ProcessMessage(message);
+//         ...
+//     }
 //
 // Usage:
 //     ImGui :: #import "Imgui"(VULKANJAI_BACKEND = true);
@@ -85,7 +94,14 @@ ImGui_ImplVulkanJai_Init :: (window: *VJ.Window, renderTargetFormat := VkFormat.
     ];
     bd.samplerIndex = VJ.WriteSamplerDescriptors(samplers);
 
-    bd.pipeline = VJ.CreateMeshletPipeline(.{}, SpirvBytes(IMGUI_IMPL_VULKANJAI_MESH_SPIRV), SpirvBytes(IMGUI_IMPL_VULKANJAI_FRAGMENT_SPIRV), debugName = "imgui");
+    bd.pipeline = VJ.CreateMeshletPipeline(
+        SHADERS.ImGui_ImplVulkanJai_Mesh,
+        SHADERS.ImGui_ImplVulkanJai_Fragment,
+        MESH_LOCAL_SIZE_X = SHADERS.IMGUI_IMPL_VULKANJAI_TRIANGLES_PER_WORKGROUP,
+        MAX_VERTICES      = SHADERS.IMGUI_IMPL_VULKANJAI_TRIANGLES_PER_WORKGROUP * 3,
+        MAX_PRIMITIVES    = SHADERS.IMGUI_IMPL_VULKANJAI_TRIANGLES_PER_WORKGROUP,
+        debugName         = "imgui",
+    );
 
     for * bd.mouseCursors  it.* = null;
     bd.mouseCursors[MouseCursor.Arrow]      = glfwCreateStandardCursor(GLFW_ARROW_CURSOR);
@@ -262,8 +278,8 @@ ImGui_ImplVulkanJai_RenderDrawData :: (draw_data: *ImDrawData, cmd: *VJ.CommandB
             data.vertices = cast(*ImGui_ImplVulkanJai_Vertex) (frame.vertices.gpu + cast(u64) ((globalVertexOffset + pcmd.VtxOffset) * size_of(ImDrawVert)));
             data.indices = cast(*u16) (frame.indices.gpu + cast(u64) ((globalIndexOffset + pcmd.IdxOffset) * size_of(ImDrawIdx)));
             data.triangleCount = triangleCount;
-            data.textureOffset = xx TextureIdToResourceHeapOffset(textureId);
-            data.samplerOffset = xx ((bd.samplerIndex + bd.currentSampler) * VJ.vk.samplerDescriptorStride);
+            data.textureIndex = xx TextureIdToResourceHeapIndex(textureId);
+            data.samplerIndex = xx (bd.samplerIndex + bd.currentSampler);
 
             dataGpu := frame.drawData.gpu + cast(u64) (drawDataIndex * size_of(ImGui_ImplVulkanJai_DrawData));
             drawDataIndex += 1;
@@ -286,10 +302,10 @@ ImGui_ImplVulkanJai_RenderDrawData :: (draw_data: *ImDrawData, cmd: *VJ.CommandB
     VJ.SetScissor(cmd, 0, 0, xx fbWidth, xx fbHeight);
 }
 
-// Use this to draw your own images: ImGui.Image(ImGui.ImTextureRefFromID(ImGui_ImplVulkanJai_TextureId(offset)), size) etc. resourceHeapOffset is what WriteImageDescriptors(.., .Sampled) returned.
-// (The offset is stored + 1, because ImTextureID_Invalid is 0 and 0 is a valid offset.)
-ImGui_ImplVulkanJai_TextureId :: (resourceHeapOffset: int) -> ImTextureID {
-    return cast(ImTextureID) (resourceHeapOffset + 1);
+// Use this to draw your own images: ImGui.Image(ImGui.ImTextureRefFromID(ImGui_ImplVulkanJai_TextureId(index)), size) etc. resourceHeapIndex is what WriteImageDescriptors(.., .Sampled) returned.
+// (The index is stored + 1, because ImTextureID_Invalid is 0 and 0 is a valid index.)
+ImGui_ImplVulkanJai_TextureId :: (resourceHeapIndex: int) -> ImTextureID {
+    return cast(ImTextureID) (resourceHeapIndex + 1);
 }
 
 // Called by RenderDrawData for the textures of imgui. You can call it yourself if you manage ImDrawData.Textures yourself.
@@ -302,6 +318,11 @@ ImGui_ImplVulkanJai_UpdateTexture :: (tex: *ImTextureData) {
 VJ :: #import "VulkanJai";
 #import "osor_vulkan";
 #import "glfw";
+
+SHADERS :: #import,file "shaders.jai";
+ImGui_ImplVulkanJai_Vertex                   :: SHADERS.ImGui_ImplVulkanJai_Vertex;
+ImGui_ImplVulkanJai_DrawData                 :: SHADERS.ImGui_ImplVulkanJai_DrawData;
+IMGUI_IMPL_VULKANJAI_TRIANGLES_PER_WORKGROUP :: SHADERS.IMGUI_IMPL_VULKANJAI_TRIANGLES_PER_WORKGROUP;
 
 Backend_Data :: struct {
     window:           *VJ.Window;
@@ -341,7 +362,7 @@ Frame_Render_Buffers :: struct {
 Texture :: struct {
     image:              VJ.Image;
     memory:             u64; // gpu pointer of the memory of the image
-    resourceHeapOffset: int;
+    resourceHeapIndex:  int;
 }
 
 GetBackendData :: () -> *Backend_Data {
@@ -428,10 +449,10 @@ UpdateTexture :: (tex: *ImTextureData) {
         backendTex.memory = VJ.GpuMalloc(size, alignment, .Gpu, debugName);
         assert(backendTex.memory != 0, "couldn't allocate % bytes for %", size, debugName);
         backendTex.image = VJ.CreateImage(backendTex.memory, description, debugName);
-        backendTex.resourceHeapOffset = VJ.WriteImageDescriptors(.[backendTex.image], .Sampled);
+        backendTex.resourceHeapIndex = VJ.WriteImageDescriptors(.[backendTex.image], .Sampled);
 
         // Store identifiers
-        tex.TexID = ImGui_ImplVulkanJai_TextureId(backendTex.resourceHeapOffset);
+        tex.TexID = ImGui_ImplVulkanJai_TextureId(backendTex.resourceHeapIndex);
         tex.BackendUserData = backendTex;
     }
 
@@ -477,8 +498,8 @@ UpdateTexture :: (tex: *ImTextureData) {
 DestroyTexture :: (tex: *ImTextureData) {
     backendTex := cast(*Texture) tex.BackendUserData;
     if backendTex {
-        assert(ImGui_ImplVulkanJai_TextureId(backendTex.resourceHeapOffset) == tex.TexID);
-        VJ.EraseResourceDescriptors(backendTex.resourceHeapOffset);
+        assert(ImGui_ImplVulkanJai_TextureId(backendTex.resourceHeapIndex) == tex.TexID);
+        VJ.EraseImageDescriptors(backendTex.resourceHeapIndex);
         VJ.DestroyImage(backendTex.image);
         VJ.GpuFree(backendTex.memory);
         free(backendTex);
@@ -491,7 +512,7 @@ DestroyTexture :: (tex: *ImTextureData) {
     SetStatus(tex, .Destroyed);
 }
 
-TextureIdToResourceHeapOffset :: (id: ImTextureID) -> int {
+TextureIdToResourceHeapIndex :: (id: ImTextureID) -> int {
     return cast(int) id - 1;
 }
 
@@ -511,13 +532,6 @@ VectorView :: (v: ImVector($T)) -> [] T {
     result: [] T;
     result.data = v.Data;
     result.count = v.Size;
-    return result;
-}
-
-SpirvBytes :: (words: [] u32) -> [] u8 {
-    result: [] u8;
-    result.data = xx words.data;
-    result.count = words.count * size_of(u32);
     return result;
 }
 

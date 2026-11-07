@@ -1,9 +1,37 @@
-// The shaders of the VulkanJai backend, compiled to SPIR-V with ApilaSpirv by generate.jai.
-// The SPIR-V is baked into imgui_impl_vulkanjai.jai, so you only need to run generate.jai again if you change this file.
+// The shaders of the VulkanJai backend, written with ApilaSpirv.
+// backend.jai imports this file and gives the shaders to VJ.CreateMeshletPipeline, the VulkanJai metaprogram bakes their SPIR-V into the program.
 
 #import "ApilaSpirv";
 #import "Math";
-#load "shared.jai";
+
+// The layout of ImDrawVert.
+ImGui_ImplVulkanJai_Vertex :: struct {
+    posX: float;
+    posY: float;
+    uvX:  float;
+    uvY:  float;
+    col:  u32; // RGBA, 8 bits per channel, R in the lowest byte
+}
+
+// One per ImDrawCmd. The same pointer is passed to the mesh and the fragment shader.
+ImGui_ImplVulkanJai_DrawData :: struct {
+    vertices:        *ImGui_ImplVulkanJai_Vertex; // the vertex buffer, offset to the first vertex of the draw command (ImDrawCmd.VtxOffset)
+    indices:         *u16;                        // the index buffer, offset to the first index of the draw command (ImDrawCmd.IdxOffset). ImDrawIdx is u16.
+    triangleCount:   u32;                         // ImDrawCmd.ElemCount / 3
+
+    // clip space position = pos * scale + translate
+    scaleX:          float;
+    scaleY:          float;
+    translateX:      float;
+    translateY:      float;
+
+    textureIndex:    u32; // index of the texture in the resource heap
+    samplerIndex:    u32; // index of the sampler in the sampler heap
+    linearizeColors: u32; // 1 if the render target is sRGB. imgui colors are in sRGB, so they are converted to linear before the hardware converts them back.
+}
+
+// The workgroup size of the mesh shader. Each workgroup outputs this many triangles, 3 vertices each.
+IMGUI_IMPL_VULKANJAI_TRIANGLES_PER_WORKGROUP :: 64;
 
 ImGui_ImplVulkanJai_MeshOutVertex :: struct {
     color: f32x4;
@@ -43,17 +71,17 @@ ImGui_ImplVulkanJai_Mesh :: (vOut: [] ImGui_ImplVulkanJai_MeshOutVertex, pOut: [
 
         meshtriangles[t] = s32x3.{ xx o, xx (o + 1), xx (o + 2) };
     }
-} @mesh @64_1_1 @192_64 @triangles
+}
 
 ImGui_ImplVulkanJai_Fragment :: (v: ImGui_ImplVulkanJai_MeshOutVertex, p: ImGui_ImplVulkanJai_MeshOutPrimitive, data: *ImGui_ImplVulkanJai_DrawData) -> f32x4 {
-    color := v.color * texture(images[data.textureOffset], samplers[data.samplerOffset], v.uv);
+    color := v.color * texture(images[data.textureIndex], samplers[data.samplerIndex], v.uv);
 
     if (data.linearizeColors != 0) {
         color = f32x4.{ SrgbToLinear(color.x), SrgbToLinear(color.y), SrgbToLinear(color.z), color.w };
     }
 
     return color;
-} @fragment
+}
 
 // The exact inverse of what the hardware does when it writes to an sRGB image, so the colors of imgui come out unchanged.
 SrgbToLinear :: (c: f32) -> f32 {
