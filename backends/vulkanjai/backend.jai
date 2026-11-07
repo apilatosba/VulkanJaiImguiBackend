@@ -318,6 +318,7 @@ ImGui_ImplVulkanJai_UpdateTexture :: (tex: *ImTextureData) {
 VJ :: #import "VulkanJai";
 #import "osor_vulkan";
 #import "glfw";
+#import "Queue"; // for_expansion of the character queue
 
 SHADERS :: #import,file "shaders.jai";
 ImGui_ImplVulkanJai_Vertex                   :: SHADERS.ImGui_ImplVulkanJai_Vertex;
@@ -588,11 +589,8 @@ UpdateInputEvents :: (bd: *Backend_Data) {
     }
 
     // Text input. Read without dequeuing so the application can still use the queue.
-    {
-        queue := *window.input.keyboard.characterQueue;
-        for 0..queue.count - 1 {
-            io.AddInputCharacter(io, queue.array[(queue.head + it) % queue.array.count]);
-        }
+    for VJ.GetCharacterQueue(window) {
+        io.AddInputCharacter(io, it);
     }
 
     // Mouse. The position of VulkanJai is y up.
