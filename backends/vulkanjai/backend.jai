@@ -28,7 +28,7 @@
 //
 //     while !WindowShouldClose(window) {
 //         AcquireSwapchainImage(window);
-//         UpdateInput(window);                          // before ImGui_ImplVulkanJai_NewFrame, the input is read from window.input
+//         UpdateInput(window);                          // before ImGui_ImplVulkanJai_NewFrame, the input is read from the events it polled
 //         ImGui.ImGui_ImplVulkanJai_NewFrame();
 //         ImGui.NewFrame();
 //         ... your ui ...
@@ -66,6 +66,7 @@ ImGui_ImplVulkanJai_Init :: (window: *VJ.Window, renderTargetFormat := VkFormat.
     bd := New(Backend_Data);
     bd.window = window;
     bd.windowWasFocused = true;
+    for KEY_MAP  bd.imguiKeys[it.key] = it.imguiKey;
     bd.frames = NewArray(window.swapchainImages.count, Frame_Render_Buffers);
 
     io.BackendRendererUserData = bd;
@@ -318,7 +319,7 @@ ImGui_ImplVulkanJai_UpdateTexture :: (tex: *ImTextureData) {
 VJ :: #import "VulkanJai";
 #import "osor_vulkan";
 #import "glfw";
-#import "Queue"; // for_expansion of the character queue
+#import "Queue";
 
 SHADERS :: #import,file "shaders.jai";
 ImGui_ImplVulkanJai_Vertex                   :: SHADERS.ImGui_ImplVulkanJai_Vertex;
@@ -344,8 +345,8 @@ Backend_Data :: struct {
     mouseCursors:     [MouseCursor.COUNT] *GLFWcursor;
     lastMouseCursor:  *GLFWcursor;
     windowWasFocused: bool;
-    keysDown:         [KEY_MAP.count] bool;
-    mouseButtonsDown: [MOUSE_BUTTON_COUNT] bool;
+    imguiKeys:        [VJ.KeyboardState.MAX_KEY_COUNT] Key;  // VulkanJai (glfw) key -> imgui key, .None if imgui has no such key
+    keysDown:         [VJ.KeyboardState.MAX_KEY_COUNT] bool; // as of the event being sent, for the modifiers
 }
 
 Gpu_Buffer :: struct {
@@ -571,51 +572,56 @@ UpdateInputEvents :: (bd: *Backend_Data) {
         bd.windowWasFocused = window.isFocused;
     }
 
-    // Keyboard. A key that was pressed and released within the frame is sent as a press and a release.
-    io.AddKeyEvent(io, .Mod_Ctrl,  VJ.IsKeyDown(window, .LeftControl) || VJ.IsKeyDown(window, .RightControl));
-    io.AddKeyEvent(io, .Mod_Shift, VJ.IsKeyDown(window, .LeftShift)   || VJ.IsKeyDown(window, .RightShift));
-    io.AddKeyEvent(io, .Mod_Alt,   VJ.IsKeyDown(window, .LeftAlt)     || VJ.IsKeyDown(window, .RightAlt));
-    io.AddKeyEvent(io, .Mod_Super, VJ.IsKeyDown(window, .LeftSuper)   || VJ.IsKeyDown(window, .RightSuper));
-
-    for KEY_MAP {
-        down := VJ.IsKeyDown(window, it.key);
-        if down != bd.keysDown[it_index] {
-            io.AddKeyEvent(io, it.imguiKey, down);
-            bd.keysDown[it_index] = down;
-        } else if !down && VJ.IsKeyPressed(window, it.key) {
-            io.AddKeyEvent(io, it.imguiKey, true);
-            io.AddKeyEvent(io, it.imguiKey, false);
-        }
-    }
-
-    // Text input. Read without dequeuing so the application can still use the queue.
-    for VJ.GetCharacterQueue(window) {
-        io.AddInputCharacter(io, it);
-    }
-
-    // Mouse. The position of VulkanJai is y up.
     // A disabled cursor has no meaningful position (it is a virtual one that keeps moving), so report it as
     // unavailable like ImGui_ImplGlfw_UpdateMouseData does.
-    mouse := *window.input.mouse;
-    if glfwGetInputMode(window.window, GLFW_CURSOR) == GLFW_CURSOR_DISABLED {
-        io.AddMousePosEvent(io, -FLOAT32_MAX, -FLOAT32_MAX);
-    } else {
-        io.AddMousePosEvent(io, mouse.position.x, cast(float) window.height - mouse.position.y);
-    }
+    cursorDisabled := glfwGetInputMode(window.window, GLFW_CURSOR) == GLFW_CURSOR_DISABLED;
 
-    for 0..MOUSE_BUTTON_COUNT - 1 {
-        down := mouse.buttonsDown[it];
-        if down != bd.mouseButtonsDown[it] {
-            io.AddMouseButtonEvent(io, xx it, down);
-            bd.mouseButtonsDown[it] = down;
-        } else if !down && mouse.buttonsPressed[it] > 0 {
-            io.AddMouseButtonEvent(io, xx it, true);
-            io.AddMouseButtonEvent(io, xx it, false);
+    // The events are sent in the order they happened, like imgui_impl_glfw does from the glfw callbacks: imgui processes its
+    // queue in order (and with io.ConfigInputTrickleEventQueue spreads it over frames), so text typed before Enter in the same
+    // frame has to be queued before the Enter, and a key pressed twice in a frame has to be sent twice.
+    for VJ.GetInputEvents(window) {
+        if it.type == {
+            case .Key;
+                // Repeats are made by imgui from the held key.
+                if it.key.action != GLFW_PRESS && it.key.action != GLFW_RELEASE  continue;
+                if it.key.key < 0 || it.key.key >= bd.keysDown.count  continue;
+
+                down := it.key.action == GLFW_PRESS;
+                bd.keysDown[it.key.key] = down;
+
+                // The modifiers as of this key, the keys after it in the frame may change them. Imgui drops the ones that didn't change.
+                io.AddKeyEvent(io, .Mod_Ctrl,  bd.keysDown[VJ.KeyboardKey.LeftControl] || bd.keysDown[VJ.KeyboardKey.RightControl]);
+                io.AddKeyEvent(io, .Mod_Shift, bd.keysDown[VJ.KeyboardKey.LeftShift]   || bd.keysDown[VJ.KeyboardKey.RightShift]);
+                io.AddKeyEvent(io, .Mod_Alt,   bd.keysDown[VJ.KeyboardKey.LeftAlt]     || bd.keysDown[VJ.KeyboardKey.RightAlt]);
+                io.AddKeyEvent(io, .Mod_Super, bd.keysDown[VJ.KeyboardKey.LeftSuper]   || bd.keysDown[VJ.KeyboardKey.RightSuper]);
+
+                imguiKey := bd.imguiKeys[it.key.key];
+                if imguiKey != .None  io.AddKeyEvent(io, imguiKey, down);
+
+            case .Character;
+                io.AddInputCharacter(io, it.character);
+
+            case .MouseButton;
+                if it.mouseButton.action != GLFW_PRESS && it.mouseButton.action != GLFW_RELEASE  continue;
+                if it.mouseButton.button < 0 || it.mouseButton.button >= MOUSE_BUTTON_COUNT  continue;
+                io.AddMouseButtonEvent(io, xx it.mouseButton.button, it.mouseButton.action == GLFW_PRESS);
+
+            case .CursorPosition;
+                // The position of VulkanJai is y up.
+                if !cursorDisabled  io.AddMousePosEvent(io, it.cursorPosition.x, cast(float) window.height - it.cursorPosition.y);
+
+            case .Scroll;
+                io.AddMouseWheelEvent(io, it.scroll.xOffset, it.scroll.yOffset);
         }
     }
 
-    if mouse.wheel != 0 || mouse.horizontalWheel != 0 {
-        io.AddMouseWheelEvent(io, mouse.horizontalWheel, mouse.wheel);
+    // The position also when it didn't move this frame (the first frame, the cursor enabled again). Imgui drops it if it is
+    // the last one sent.
+    if cursorDisabled {
+        io.AddMousePosEvent(io, -FLOAT32_MAX, -FLOAT32_MAX);
+    } else {
+        mouse := *window.input.mouse;
+        io.AddMousePosEvent(io, mouse.position.x, cast(float) window.height - mouse.position.y);
     }
 }
 
